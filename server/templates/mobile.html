@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Women's Safety App</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: #f5f7fa;
+            min-height: 100vh;
+            color: #333;
+        }
+        
+        .app-container {
+            max-width: 100%;
+            min-height: 100vh;
+            background: white;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            padding-top: max(20px, env(safe-area-inset-top));
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            font-size: 20px;
+            font-weight: 600;
+            flex: 1;
+            text-align: center;
+        }
+        
+        .header-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .header-btn:active {
+            background: rgba(255,255,255,0.3);
+        }
+        
+        .content {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        
+        .screen {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        .screen.active {
+            display: block;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 16px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .btn:active {
+            transform: scale(0.98);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%);
+            color: white;
+            font-size: 24px;
+            height: 200px;
+            width: 200px;
+            border-radius: 50%;
+            margin: 40px auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 10px 30px rgba(255, 75, 43, 0.4);
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(255, 75, 43, 0.4); }
+            70% { box-shadow: 0 0 0 20px rgba(255, 75, 43, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 75, 43, 0); }
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #666;
+        }
+        
+        .form-group input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #eee;
+            border-radius: 12px;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        
+        .form-group input:focus {
+            border-color: #667eea;
+        }
+        
+        .status-card {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 1px solid #eee;
+        }
+        
+        .user-info {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .user-info h2 {
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+        
+        .user-info p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+        
+        .alert-active {
+            background: #fff5f5;
+            border: 2px solid #ff4b2b;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .alert-active h2 {
+            color: #ff4b2b;
+            margin-bottom: 10px;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        .action-card {
+            background: white;
+            padding: 15px;
+            border-radius: 12px;
+            text-align: center;
+            border: 1px solid #eee;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .action-card:active {
+            transform: scale(0.95);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .action-card.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .bottom-nav {
+            background: white;
+            padding: 15px;
+            border-top: 1px solid #eee;
+            display: flex;
+            justify-content: space-around;
+            padding-bottom: max(15px, env(safe-area-inset-bottom));
+        }
+        
+        .nav-item {
+            text-align: center;
+            color: #999;
+            font-size: 12px;
+            text-decoration: none;
+        }
+        
+        .nav-item.active {
+            color: #667eea;
+        }
+        
+        .nav-icon {
+            font-size: 24px;
+            display: block;
+            margin-bottom: 4px;
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .btn-success {
+            background: #27ae60;
+            color: white;
+        }
+        
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #333;
+        }
+        
+        .alert-history-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .alert-history-item.resolved {
+            border-left-color: #27ae60;
+        }
+        
+        .alert-history-item.cancelled {
+            border-left-color: #e0e0e0;
+        }
+        
+        /* Loading Screen */
+        #loadingScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            color: white;
+        }
+        
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .loading-text {
+            margin-top: 20px;
+            font-size: 16px;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loadingScreen">
+        <div style="font-size: 60px; margin-bottom: 20px;">🛡️</div>
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading...</div>
+    </div>
+    
+    <div class="app-container" style="display: none;">
+        <div class="header">
+            <div style="width: 60px;"></div>
+            <h1 id="headerTitle">🛡️ Women Safety</h1>
+            <button id="logoutBtn" class="header-btn hidden">Logout</button>
+        </div>
+        
+        <div class="content">
+            <!-- Registration Screen -->
+            <div id="registrationScreen" class="screen active">
+                <div style="text-align: center; margin-bottom: 40px; margin-top: 40px;">
+                    <div style="font-size: 80px; margin-bottom: 20px;">🛡️</div>
+                    <h2 style="margin-bottom: 10px;">Welcome to Women Safety</h2>
+                    <p style="color: #666;">Your personal safety companion</p>
+                </div>
+                
+                <form id="registrationForm">
+                    <div class="form-group">
+                        <label>Full Name</label>
+                        <input type="text" id="name" placeholder="Enter your full name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Phone Number</label>
+                        <input type="tel" id="phone" placeholder="+91 9876543210" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Get Started</button>
+                </form>
+            </div>
+            
+            <!-- Main Screen -->
+            <div id="mainScreen" class="screen">
+                <div class="user-info">
+                    <h2 id="userName">User</h2>
+                    <p id="userPhone">+91 XXXXX XXXXX</p>
+                </div>
+                
+                <div class="status-card">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <strong>Status</strong>
+                            <div id="statusIndicator" style="color: #27ae60; font-size: 14px;">● Protected</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <strong>Location</strong>
+                            <div id="locationStatus" style="color: #666; font-size: 14px;">Updating...</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="activeAlertBox" class="alert-active hidden">
+                    <h2>🚨 HELP ON THE WAY</h2>
+                    <p>Emergency responders have been notified of your location.</p>
+                    <p style="margin-top: 10px;"><strong>Alert ID:</strong> <span id="alertId">--</span></p>
+                    <p style="font-size: 12px; opacity: 0.8; margin-top: 5px;">Stay calm. Help is coming.</p>
+                </div>
+                
+                <button id="sosButton" class="btn btn-danger">
+                    <span style="font-size: 32px;">🚨</span>
+                    <span style="margin-top: 10px;">SOS</span>
+                    <span style="font-size: 14px; font-weight: normal; margin-top: 5px;">Press for Emergency</span>
+                </button>
+                
+                <button id="cancelButton" class="btn hidden" style="background: #27ae60; color: white;">
+                    ✓ I am Safe (Cancel Alert)
+                </button>
+                
+                <div style="margin-top: 30px;">
+                    <h3 class="section-title">Quick Actions</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div class="action-card" id="shareLocationBtn">
+                            <div style="font-size: 28px; margin-bottom: 8px;">📍</div>
+                            <div style="font-weight: 600;">Share Location</div>
+                            <div style="font-size: 12px; color: #666; margin-top: 5px;">Send to contacts</div>
+                        </div>
+                        <div class="action-card" id="viewHistoryBtn">
+                            <div style="font-size: 28px; margin-bottom: 8px;">📋</div>
+                            <div style="font-weight: 600;">Alert History</div>
+                            <div style="font-size: 12px; color: #666; margin-top: 5px;">View past alerts</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Alert History Screen -->
+            <div id="historyScreen" class="screen">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2 class="section-title" style="margin: 0;">Alert History</h2>
+                    <button id="backToMainBtn" class="btn btn-secondary" style="padding: 8px 16px; width: auto; margin: 0;">Back</button>
+                </div>
+                
+                <div id="historyList">
+                    <div style="text-align: center; padding: 40px; color: #999;">
+                        <div style="font-size: 48px; margin-bottom: 10px;">📋</div>
+                        <p>No alert history yet</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/socket.io.min.js"></script>
+    <script>
+        let currentUser = null;
+        let currentAlert = null;
+        let socket = null;
+        let watchId = null;
+        let alertHistory = [];
+        
+        // Time formatting helpers
+        function formatTime(dateString) {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString);
+            return date.toLocaleString('en-IN', { 
+                timeZone: 'Asia/Kolkata',
+                hour12: true,
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+        
+        function formatTimeAgo(dateString) {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString);
+            const now = new Date();
+            const diffMs = now - date;
+            const diffMins = Math.floor(diffMs / 60000);
+            
+            if (diffMins < 1) return 'Just now';
+            if (diffMins < 60) return `${diffMins}m ago`;
+            const diffHours = Math.floor(diffMins / 60);
+            if (diffHours < 24) return `${diffHours}h ago`;
+            const diffDays = Math.floor(diffHours / 24);
+            return `${diffDays}d ago`;
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            const savedUser = localStorage.getItem('ws_user');
+            if (savedUser) {
+                currentUser = JSON.parse(savedUser);
+                // Verify user still exists in database
+                await verifyUser();
+            }
+        });
+        
+        async function verifyUser() {
+            try {
+                // Try to get user's alerts to verify account exists
+                const res = await fetch('/api/alerts');
+                if (res.ok) {
+                    showMainScreen();
+                } else {
+                    // User might not exist anymore
+                    console.log('User verification failed, showing login');
+                    logout();
+                }
+            } catch (err) {
+                // Network error, still show main screen
+                console.log('Network error during verification, continuing');
+                showMainScreen();
+            }
+        }
+        
+        function showMainScreen() {
+            showScreen('mainScreen');
+            document.getElementById('logoutBtn').classList.remove('hidden');
+            document.getElementById('userName').textContent = currentUser.name;
+            document.getElementById('userPhone').textContent = maskPhone(currentUser.phone);
+            connectSocket();
+            startLocation();
+            loadAlertHistory();
+        }
+        
+        function maskPhone(phone) {
+            if (!phone) return '';
+            const last4 = phone.slice(-4);
+            return phone.slice(0, 3) + ' XXXXX ' + last4;
+        }
+        
+        function connectSocket() {
+            // Defer Socket.IO connection to improve initial page load
+            setTimeout(() => {
+                socket = io();
+                
+                socket.on('connect', () => {
+                    if (currentUser) {
+                        socket.emit('user_register', { user_id: currentUser.id });
+                    }
+                });
+                
+                socket.on('responder_dispatched', (data) => {
+                    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+                    showNotification('Responder Dispatched', `${data.responder.name} is on the way!`);
+                });
+                
+                socket.on('alert_status_changed', (data) => {
+                    if (currentAlert && data.alert_id === currentAlert.alert_id) {
+                        showNotification('Alert Status', `Status changed to: ${data.status}`);
+                    }
+                });
+            }, 500); // Delay Socket.IO connection by 500ms
+        }
+        
+        function showNotification(title, message) {
+            // Vibrate only
+            if (navigator.vibrate) {
+                navigator.vibrate([200, 100, 200]);
+            }
+            
+            // Show notification
+            if ('Notification' in window && Notification.permission === 'granted') {
+                new Notification(title, { 
+                    body: message, 
+                    icon: '🛡️',
+                    vibrate: [200, 100, 200],
+                    requireInteraction: true
+                });
+            } else {
+                alert(`${title}: ${message}`);
+            }
+        }
+        
+        function startLocation() {
+            // Check if running on secure context
+            const isSecureContext = window.isSecureContext || location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+            
+            if (!isSecureContext) {
+                document.getElementById('locationStatus').textContent = '⚠️ Insecure';
+                document.getElementById('locationStatus').style.color = '#e67e22';
+                console.warn('Geolocation requires HTTPS or localhost');
+                
+                // Show warning to user
+                if (confirm('⚠️ Location services may not work on HTTP.\n\nFor mobile access, use HTTPS or ngrok.\n\nContinue anyway?')) {
+                    attemptGeolocation();
+                }
+                return;
+            }
+            
+            if (!navigator.geolocation) {
+                document.getElementById('locationStatus').textContent = 'Not Supported';
+                document.getElementById('locationStatus').style.color = '#e74c3c';
+                return;
+            }
+            
+            attemptGeolocation();
+        }
+        
+        function attemptGeolocation() {
+            // Request notification permission
+            if ('Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
+            
+            watchId = navigator.geolocation.watchPosition(
+                pos => {
+                    document.getElementById('locationStatus').textContent = 'Active ✓';
+                    document.getElementById('locationStatus').style.color = '#27ae60';
+                    if (currentAlert) {
+                        socket.emit('location_update', {
+                            alert_id: currentAlert.alert_id,
+                            latitude: pos.coords.latitude,
+                            longitude: pos.coords.longitude,
+                            accuracy: pos.coords.accuracy
+                        });
+                    }
+                },
+                err => {
+                    let errorMsg = 'Disabled';
+                    let errorColor = '#e74c3c';
+                    
+                    switch(err.code) {
+                        case err.PERMISSION_DENIED:
+                            errorMsg = '🚫 Denied';
+                            alert('Location permission denied.\n\nPlease enable location in your browser settings.');
+                            break;
+                        case err.POSITION_UNAVAILABLE:
+                            errorMsg = '📍 Unavailable';
+                            break;
+                        case err.TIMEOUT:
+                            errorMsg = '⏱️ Timeout';
+                            break;
+                        default:
+                            errorMsg = '❌ Error';
+                    }
+                    
+                    document.getElementById('locationStatus').textContent = errorMsg;
+                    document.getElementById('locationStatus').style.color = errorColor;
+                    console.error('Geolocation error:', err.message);
+                },
+                { 
+                    enableHighAccuracy: true, 
+                    maximumAge: 10000, 
+                    timeout: 5000 
+                }
+            );
+        }
+        
+        // Registration
+        document.getElementById('registrationForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('name').value.trim();
+            const phone = document.getElementById('phone').value.trim();
+            
+            if (!name || !phone) {
+                alert('Please fill all fields');
+                return;
+            }
+            
+            try {
+                const res = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ name, phone })
+                });
+                
+                const data = await res.json();
+                if (res.ok) {
+                    currentUser = data.user;
+                    // Store full phone number for SOS functionality
+                    if (data.user.phone_full) {
+                        currentUser.phone = data.user.phone_full;
+                    } else {
+                        currentUser.phone = phone; // fallback to input phone
+                    }
+                    localStorage.setItem('ws_user', JSON.stringify(currentUser));
+                    showMainScreen();
+                } else {
+                    alert(data.error || 'Registration failed');
+                }
+            } catch (err) {
+                alert('Connection failed. Please check your internet.');
+            }
+        });
+        
+        // Logout function
+        function logout() {
+            if (watchId) {
+                navigator.geolocation.clearWatch(watchId);
+            }
+            
+            if (socket) {
+                socket.disconnect();
+            }
+            
+            localStorage.removeItem('ws_user');
+            currentUser = null;
+            currentAlert = null;
+            alertHistory = [];
+            
+            document.getElementById('logoutBtn').classList.add('hidden');
+            document.getElementById('name').value = '';
+            document.getElementById('phone').value = '';
+            showScreen('registrationScreen');
+        }
+        
+        // Logout button click
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            if (confirm('Are you sure you want to logout?')) {
+                if (currentAlert) {
+                    alert('Please cancel active alert before logging out.');
+                    return;
+                }
+                logout();
+            }
+        });
+        
+        // SOS Button
+        document.getElementById('sosButton').addEventListener('click', async () => {
+            if (!confirm('⚠️ TRIGGER EMERGENCY ALERT?\n\nThis will notify emergency responders immediately.')) return;
+            
+            document.getElementById('sosButton').disabled = true;
+            document.getElementById('statusIndicator').innerHTML = '● Alert Active';
+            document.getElementById('statusIndicator').style.color = '#ff4b2b';
+            
+            if (navigator.geolocation) {
+                const options = {
+                    enableHighAccuracy: true,
+                    timeout: 5000,
+                    maximumAge: 0
+                };
+                
+                navigator.geolocation.getCurrentPosition(
+                    async (pos) => {
+                        console.log('Location obtained:', pos.coords.latitude, pos.coords.longitude);
+                        await triggerSOS(pos.coords.latitude, pos.coords.longitude);
+                    },
+                    async (err) => {
+                        console.error('Geolocation error:', err.code, err.message);
+                        let errorMsg = 'Location unavailable';
+                        
+                        switch(err.code) {
+                            case err.PERMISSION_DENIED:
+                                errorMsg = 'Location permission denied. Alert will be sent without location.';
+                                break;
+                            case err.POSITION_UNAVAILABLE:
+                                errorMsg = 'Location service unavailable. Alert will be sent without location.';
+                                break;
+                            case err.TIMEOUT:
+                                errorMsg = 'Location timeout. Alert will be sent without location.';
+                                break;
+                        }
+                        
+                        console.warn(errorMsg);
+                        // Still trigger alert without location
+                        await triggerSOS(null, null);
+                    },
+                    options
+                );
+            } else {
+                console.warn('Geolocation not supported');
+                await triggerSOS(null, null);
+            }
+        });
+        
+        async function triggerSOS(lat, lon) {
+            try {
+                const res = await fetch('/api/sos/trigger', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        phone: currentUser.phone,
+                        latitude: lat,
+                        longitude: lon,
+                        trigger_method: 'button'
+                    })
+                });
+                
+                const data = await res.json();
+                if (res.ok) {
+                    currentAlert = data.alert;
+                    updateUI(true);
+                    
+                    // Vibrate on SOS
+                    if (navigator.vibrate) navigator.vibrate([500, 200, 500, 200, 500]);
+                    
+                    showNotification('Emergency Alert', 'Help is on the way!');
+                } else {
+                    // Handle "User not found" error - clear localStorage and show login
+                    if (data.error && data.error.includes('User not found')) {
+                        alert('Your account was not found. Please register again.');
+                        logout();
+                    } else {
+                        alert('Error: ' + (data.error || 'Failed to trigger alert'));
+                    }
+                    document.getElementById('sosButton').disabled = false;
+                    document.getElementById('statusIndicator').innerHTML = '● Protected';
+                    document.getElementById('statusIndicator').style.color = '#27ae60';
+                }
+            } catch (err) {
+                alert('Failed to trigger alert. Please try again.');
+                document.getElementById('sosButton').disabled = false;
+                document.getElementById('statusIndicator').innerHTML = '● Protected';
+                document.getElementById('statusIndicator').style.color = '#27ae60';
+            }
+        }
+        
+        // Cancel Alert
+        document.getElementById('cancelButton').addEventListener('click', async () => {
+            if (!confirm('Cancel emergency alert?\n\nOnly cancel if you are truly safe.')) return;
+            
+            document.getElementById('cancelButton').disabled = true;
+            
+            try {
+                const res = await fetch('/api/sos/cancel', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ alert_id: currentAlert.alert_id })
+                });
+                
+                if (res.ok) {
+                    currentAlert = null;
+                    updateUI(false);
+                    showNotification('Alert Cancelled', 'Emergency alert has been cancelled.');
+                    loadAlertHistory();
+                } else {
+                    alert('Failed to cancel alert');
+                    document.getElementById('cancelButton').disabled = false;
+                }
+            } catch (err) {
+                alert('Connection error. Please try again.');
+                document.getElementById('cancelButton').disabled = false;
+            }
+        });
+        
+        // Share Location
+        document.getElementById('shareLocationBtn').addEventListener('click', () => {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition((pos) => {
+                    const lat = pos.coords.latitude;
+                    const lon = pos.coords.longitude;
+                    const url = `https://maps.google.com/?q=${lat},${lon}`;
+                    
+                    if (navigator.share) {
+                        navigator.share({
+                            title: 'My Current Location',
+                            text: 'I am sharing my location with you.',
+                            url: url
+                        }).catch(() => {
+                            copyToClipboard(url);
+                        });
+                    } else {
+                        copyToClipboard(url);
+                    }
+                }, () => {
+                    alert('Unable to get your location. Please enable location services.');
+                });
+            } else {
+                alert('Location sharing is not supported on this device.');
+            }
+        });
+        
+        function copyToClipboard(text) {
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(text).then(() => {
+                    alert('Location link copied to clipboard!');
+                });
+            } else {
+                alert('Location URL: ' + text);
+            }
+        }
+        
+        // View History
+        document.getElementById('viewHistoryBtn').addEventListener('click', () => {
+            showScreen('historyScreen');
+            loadAlertHistory();
+        });
+        
+        document.getElementById('backToMainBtn').addEventListener('click', () => {
+            showScreen('mainScreen');
+        });
+        
+        async function loadAlertHistory() {
+            try {
+                const res = await fetch('/api/alerts');
+                const data = await res.json();
+                
+                if (res.ok && data.alerts) {
+                    // Filter user's alerts
+                    alertHistory = data.alerts.filter(a => 
+                        a.user && (a.user.phone === currentUser.phone || a.user.id === currentUser.id)
+                    );
+                    renderHistory();
+                }
+            } catch (err) {
+                console.error('Failed to load history:', err);
+            }
+        }
+        
+        function renderHistory() {
+            const historyList = document.getElementById('historyList');
+            
+            if (alertHistory.length === 0) {
+                historyList.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: #999;">
+                        <div style="font-size: 48px; margin-bottom: 10px;">📋</div>
+                        <p>No alert history yet</p>
+                        <p style="font-size: 14px; margin-top: 10px;">Your emergency alerts will appear here</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            historyList.innerHTML = alertHistory.map(alert => `
+                <div class="alert-history-item ${alert.status}">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                        <strong>#${alert.alert_id.substring(0, 8)}</strong>
+                        <span style="font-size: 12px; color: #666;">
+                            ${formatTimeAgo(alert.triggered_at)}
+                        </span>
+                    </div>
+                    <div style="font-size: 14px; color: #666;">
+                        <div><strong>Time:</strong> ${formatTime(alert.triggered_at)}</div>
+                        <div><strong>Status:</strong> ${alert.status.toUpperCase()}</div>
+                        <div><strong>Threat Level:</strong> ${alert.threat_level.toUpperCase()}</div>
+                        ${alert.response_time_seconds ? 
+                            `<div><strong>Response Time:</strong> ${Math.floor(alert.response_time_seconds / 60)} min</div>` : 
+                            ''
+                        }
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function updateUI(isAlertActive) {
+            const sosBtn = document.getElementById('sosButton');
+            const cancelBtn = document.getElementById('cancelButton');
+            const alertBox = document.getElementById('activeAlertBox');
+            
+            if (isAlertActive) {
+                sosBtn.classList.add('hidden');
+                cancelBtn.classList.remove('hidden');
+                alertBox.classList.remove('hidden');
+                document.getElementById('alertId').textContent = currentAlert.alert_id.substring(0, 8);
+                cancelBtn.disabled = false;
+            } else {
+                sosBtn.classList.remove('hidden');
+                sosBtn.disabled = false;
+                cancelBtn.classList.add('hidden');
+                alertBox.classList.add('hidden');
+                document.getElementById('statusIndicator').innerHTML = '● Protected';
+                document.getElementById('statusIndicator').style.color = '#27ae60';
+            }
+        }
+        
+        function showScreen(id) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+            
+            // Update header title
+            const titles = {
+                'registrationScreen': '🛡️ Women Safety',
+                'mainScreen': '🛡️ Women Safety',
+                'historyScreen': '📋 Alert History'
+            };
+            document.getElementById('headerTitle').textContent = titles[id] || '🛡️ Women Safety';
+        }
+        
+        // Hide loading screen once page is ready
+        window.addEventListener('load', function() {
+            setTimeout(() => {
+                document.getElementById('loadingScreen').style.display = 'none';
+                document.querySelector('.app-container').style.display = 'block';
+            }, 300); // Brief delay for smooth transition
+        });
+    </script>
+</body>
+</html>

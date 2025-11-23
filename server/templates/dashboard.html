@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Women's Safety System - Control Center</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+        }
+        
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            color: #667eea;
+            font-size: 28px;
+            margin-bottom: 5px;
+        }
+        
+        .header p {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 20px auto;
+            padding: 0 20px;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .stat-card h3 {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+        
+        .stat-card .value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .stat-card.critical .value {
+            color: #e74c3c;
+        }
+        
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+        }
+        
+        .panel {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .panel h2 {
+            margin-bottom: 20px;
+            color: #667eea;
+            font-size: 20px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        
+        .alert-item {
+            background: #f8f9fa;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            transition: all 0.3s;
+        }
+        
+        .alert-item:hover {
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .alert-item.critical {
+            border-left-color: #e74c3c;
+            background: #fee;
+        }
+        
+        .alert-item.high {
+            border-left-color: #f39c12;
+            background: #fef5e7;
+        }
+        
+        .alert-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .alert-id {
+            font-weight: bold;
+            color: #333;
+            font-size: 14px;
+        }
+        
+        .alert-status {
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        
+        .status-triggered {
+            background: #e74c3c;
+            color: white;
+        }
+        
+        .status-acknowledged {
+            background: #f39c12;
+            color: white;
+        }
+        
+        .status-dispatched {
+            background: #3498db;
+            color: white;
+        }
+        
+        .status-resolved {
+            background: #27ae60;
+            color: white;
+        }
+        
+        .alert-details {
+            font-size: 13px;
+            color: #666;
+            line-height: 1.6;
+        }
+        
+        .alert-details strong {
+            color: #333;
+        }
+        
+        .alert-actions {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+        
+        .btn-success {
+            background: #27ae60;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #229954;
+        }
+        
+        .btn-danger {
+            background: #e74c3c;
+            color: white;
+        }
+        
+        .connection-status {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        
+        .connection-status.connected {
+            background: #27ae60;
+            box-shadow: 0 0 10px #27ae60;
+        }
+        
+        .connection-status.disconnected {
+            background: #e74c3c;
+        }
+        
+        .map-container {
+            width: 100%;
+            height: 500px;
+            background: #e0e0e0;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .responder-item {
+            background: #f8f9fa;
+            padding: 12px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .responder-info {
+            font-size: 13px;
+        }
+        
+        .responder-name {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 3px;
+        }
+        
+        .responder-type {
+            color: #666;
+            font-size: 12px;
+        }
+        
+        .responder-status {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        
+        .responder-status.available {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .responder-status.busy {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+        
+        .empty-state svg {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 20px;
+            opacity: 0.3;
+        }
+        
+        @media (max-width: 968px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .alerts-responders-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+            100% {
+                opacity: 1;
+            }
+        }
+        
+        .alerts-responders-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+        }
+        
+        .leaflet-popup-content-wrapper {
+            border-radius: 8px;
+        }
+        
+        .popup-content {
+            font-size: 13px;
+        }
+        
+        .popup-content strong {
+            color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🛡️ Women's Safety System - Control Center</h1>
+        <p>
+            <span class="connection-status" id="connectionStatus"></span>
+            <span id="connectionText">Connecting...</span> | 
+            Real-time monitoring and emergency response coordination
+        </p>
+    </div>
+    
+    <div class="container">
+        <!-- Statistics -->
+        <div class="stats">
+            <div class="stat-card critical">
+                <h3>Active Alerts</h3>
+                <div class="value" id="activeAlerts">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Total Alerts Today</h3>
+                <div class="value" id="totalAlerts">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Available Responders</h3>
+                <div class="value" id="availableResponders">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Avg Response Time</h3>
+                <div class="value" id="avgResponseTime">--</div>
+            </div>
+        </div>
+        
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Map Panel -->
+            <div class="panel">
+                <h2>🗺️ Live Map - Alerts & Responders</h2>
+                <div class="map-container">
+                    <div id="map"></div>
+                </div>
+            </div>
+            
+            <!-- Alerts and Responders Grid -->
+            <div class="alerts-responders-grid">
+                <!-- Alerts Panel -->
+                <div class="panel">
+                    <h2>🚨 Active Alerts</h2>
+                    <div id="alertsList">
+                        <div class="empty-state">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+                            </svg>
+                            <p>No active alerts</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Responders Panel -->
+                <div class="panel">
+                    <h2>👮 Responders</h2>
+                    <div id="respondersList">
+                        <div class="empty-state">
+                            <p>Loading responders...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script>
+        // WebSocket connection
+        const socket = io();
+        
+        // State
+        let alerts = {};
+        let responders = {};
+        let map;
+        let alertMarkers = {};
+        let responderMarkers = {};
+        
+        // Time formatting helper
+        function formatTime(dateString) {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString);
+            return date.toLocaleString('en-IN', { 
+                timeZone: 'Asia/Kolkata',
+                hour12: true,
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        }
+        
+        function formatTimeAgo(dateString) {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString);
+            const now = new Date();
+            const diffMs = now - date;
+            const diffMins = Math.floor(diffMs / 60000);
+            
+            if (diffMins < 1) return 'Just now';
+            if (diffMins < 60) return `${diffMins} min ago`;
+            const diffHours = Math.floor(diffMins / 60);
+            if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+            const diffDays = Math.floor(diffHours / 24);
+            return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+        }
+        
+        // Initialize map
+        function initMap() {
+            // Create map centered on Delhi
+            map = L.map('map').setView([28.6139, 77.2090], 13);
+            
+            // Add OpenStreetMap tiles
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 19
+            }).addTo(map);
+            
+            // Custom icons
+            window.alertIcon = L.divIcon({
+                className: 'custom-alert-icon',
+                html: '<div style="background: #e74c3c; width: 30px; height: 30px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; font-size: 18px; animation: pulse-marker 1.5s infinite;">🚨</div>',
+                iconSize: [30, 30],
+                iconAnchor: [15, 15]
+            });
+            
+            window.responderIcon = L.divIcon({
+                className: 'custom-responder-icon',
+                html: '<div style="background: #27ae60; width: 24px; height: 24px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center; font-size: 14px;">👮</div>',
+                iconSize: [24, 24],
+                iconAnchor: [12, 12]
+            });
+            
+            window.medicalIcon = L.divIcon({
+                className: 'custom-medical-icon',
+                html: '<div style="background: #3498db; width: 24px; height: 24px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center; font-size: 14px;">🚑</div>',
+                iconSize: [24, 24],
+                iconAnchor: [12, 12]
+            });
+            
+            window.volunteerIcon = L.divIcon({
+                className: 'custom-volunteer-icon',
+                html: '<div style="background: #f39c12; width: 24px; height: 24px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center; font-size: 14px;">🤝</div>',
+                iconSize: [24, 24],
+                iconAnchor: [12, 12]
+            });
+            
+            // Add CSS for pulse animation
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes pulse-marker {
+                    0%, 100% { transform: scale(1); opacity: 1; }
+                    50% { transform: scale(1.2); opacity: 0.8; }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+        
+        // Update map markers for alerts
+        function updateAlertMarkers() {
+            // Remove old markers
+            Object.values(alertMarkers).forEach(marker => map.removeLayer(marker));
+            alertMarkers = {};
+            
+            // Add new markers
+            Object.values(alerts).forEach(alert => {
+                if (alert.latitude && alert.longitude && 
+                    (alert.status === 'triggered' || alert.status === 'acknowledged' || alert.status === 'dispatched')) {
+                    
+                    const marker = L.marker([alert.latitude, alert.longitude], {
+                        icon: alertIcon
+                    }).addTo(map);
+                    
+                    const popupContent = `
+                        <div class="popup-content">
+                            <strong>Alert #${alert.alert_id.substring(0, 8)}</strong><br>
+                            <strong>Status:</strong> ${alert.status.toUpperCase()}<br>
+                            <strong>Threat:</strong> ${alert.threat_level.toUpperCase()}<br>
+                            <strong>Trigger:</strong> ${alert.trigger_method}<br>
+                            <strong>Time:</strong> ${formatTime(alert.triggered_at)}<br>
+                            <strong>Ago:</strong> ${formatTimeAgo(alert.triggered_at)}<br>
+                            ${alert.ai_risk_score ? `<strong>Risk:</strong> ${(alert.ai_risk_score * 100).toFixed(0)}%<br>` : ''}
+                        </div>
+                    `;
+                    
+                    marker.bindPopup(popupContent);
+                    alertMarkers[alert.alert_id] = marker;
+                    
+                    // Auto-open popup for new triggered alerts
+                    if (alert.status === 'triggered') {
+                        marker.openPopup();
+                    }
+                }
+            });
+        }
+        
+        // Update map markers for responders
+        function updateResponderMarkers() {
+            // Remove old markers
+            Object.values(responderMarkers).forEach(marker => map.removeLayer(marker));
+            responderMarkers = {};
+            
+            // Add new markers
+            Object.values(responders).forEach(responder => {
+                if (responder.latitude && responder.longitude && responder.is_available) {
+                    
+                    let icon = responderIcon;
+                    if (responder.type === 'medical') icon = medicalIcon;
+                    else if (responder.type === 'volunteer') icon = volunteerIcon;
+                    
+                    const marker = L.marker([responder.latitude, responder.longitude], {
+                        icon: icon
+                    }).addTo(map);
+                    
+                    const popupContent = `
+                        <div class="popup-content">
+                            <strong>${responder.name}</strong><br>
+                            <strong>Type:</strong> ${responder.type.toUpperCase()}<br>
+                            <strong>Status:</strong> ${responder.is_available ? 'Available' : 'Busy'}<br>
+                            <strong>Rating:</strong> ${responder.rating} ⭐<br>
+                        </div>
+                    `;
+                    
+                    marker.bindPopup(popupContent);
+                    responderMarkers[responder.responder_id] = marker;
+                }
+            });
+        }
+        
+        // Connection status
+        socket.on('connect', () => {
+            document.getElementById('connectionStatus').className = 'connection-status connected';
+            document.getElementById('connectionText').textContent = 'Connected';
+            
+            // Initialize map on first connection
+            if (!map) {
+                initMap();
+            }
+            
+            // Load initial data
+            loadAlerts();
+            loadResponders();
+        });
+        
+        socket.on('disconnect', () => {
+            document.getElementById('connectionStatus').className = 'connection-status disconnected';
+            document.getElementById('connectionText').textContent = 'Disconnected';
+        });
+        
+        // Alert events
+        socket.on('alert_triggered', (data) => {
+            console.log('New alert:', data);
+            alerts[data.alert_id] = data;
+            renderAlerts();
+            updateStats();
+            updateAlertMarkers();
+            
+            // Pan map to alert location
+            if (data.latitude && data.longitude) {
+                map.setView([data.latitude, data.longitude], 15);
+            }
+            
+            // Play alert sound
+            playAlertSound();
+            
+            // Show browser notification
+            showBrowserNotification(data);
+            
+            // Flash page title
+            flashTitle('🚨 NEW ALERT!');
+        });
+        
+        socket.on('alert_status_changed', (data) => {
+            console.log('Alert status changed:', data);
+            if (alerts[data.alert_id]) {
+                alerts[data.alert_id].status = data.status;
+                renderAlerts();
+                updateStats();
+                updateAlertMarkers();
+            }
+        });
+        
+        socket.on('alert_cancelled', (data) => {
+            console.log('Alert cancelled:', data);
+            if (alerts[data.alert_id]) {
+                alerts[data.alert_id].status = 'cancelled';
+                renderAlerts();
+                updateStats();
+                updateAlertMarkers();
+            }
+        });
+        
+        socket.on('location_updated', (data) => {
+            console.log('Location updated:', data);
+            if (alerts[data.alert_id]) {
+                alerts[data.alert_id].latitude = data.latitude;
+                alerts[data.alert_id].longitude = data.longitude;
+                renderAlerts();
+                updateAlertMarkers();
+            }
+        });
+        
+        // Load alerts from API
+        async function loadAlerts() {
+            try {
+                const response = await fetch('/api/alerts?status=triggered');
+                const data = await response.json();
+                
+                alerts = {};
+                data.alerts.forEach(alert => {
+                    alerts[alert.alert_id] = alert;
+                });
+                
+                renderAlerts();
+                updateStats();
+                updateAlertMarkers();
+            } catch (error) {
+                console.error('Error loading alerts:', error);
+            }
+        }
+        
+        // Load responders from API
+        async function loadResponders() {
+            try {
+                const response = await fetch('/api/responders');
+                const data = await response.json();
+                
+                responders = {};
+                data.responders.forEach(responder => {
+                    responders[responder.responder_id] = responder;
+                });
+                
+                renderResponders();
+                updateStats();
+                updateResponderMarkers();
+            } catch (error) {
+                console.error('Error loading responders:', error);
+            }
+        }
+        
+        // Render alerts
+        function renderAlerts() {
+            const alertsList = document.getElementById('alertsList');
+            const activeAlerts = Object.values(alerts).filter(a => 
+                a.status === 'triggered' || a.status === 'acknowledged' || a.status === 'dispatched'
+            );
+            
+            if (activeAlerts.length === 0) {
+                alertsList.innerHTML = `
+                    <div class="empty-state">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+                        </svg>
+                        <p>No active alerts</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            alertsList.innerHTML = activeAlerts.map(alert => `
+                <div class="alert-item ${alert.threat_level} ${alert.status === 'triggered' ? 'pulse' : ''}">
+                    <div class="alert-header">
+                        <span class="alert-id">Alert #${alert.alert_id.substring(0, 8)}</span>
+                        <span class="alert-status status-${alert.status}">${alert.status}</span>
+                    </div>
+                    <div class="alert-details">
+                        <div><strong>Threat Level:</strong> ${alert.threat_level.toUpperCase()}</div>
+                        <div><strong>Trigger:</strong> ${alert.trigger_method}</div>
+                        <div><strong>Location:</strong> ${alert.latitude ? 
+                            `${alert.latitude.toFixed(4)}, ${alert.longitude.toFixed(4)}` : 
+                            'Location unavailable'
+                        }</div>
+                        <div><strong>Time:</strong> ${formatTime(alert.triggered_at)} (${formatTimeAgo(alert.triggered_at)})</div>
+                        ${alert.ai_risk_score ? 
+                            `<div><strong>AI Risk Score:</strong> ${(alert.ai_risk_score * 100).toFixed(0)}%</div>` : 
+                            ''
+                        }
+                    </div>
+                    <div class="alert-actions">
+                        ${alert.status === 'triggered' ? 
+                            `<button class="btn btn-primary" onclick="acknowledgeAlert('${alert.alert_id}')">Acknowledge</button>` : 
+                            ''
+                        }
+                        ${alert.status === 'acknowledged' ? 
+                            `<button class="btn btn-primary" onclick="dispatchResponder('${alert.alert_id}')">Dispatch</button>` : 
+                            ''
+                        }
+                        ${alert.status === 'dispatched' ? 
+                            `<button class="btn btn-success" onclick="resolveAlert('${alert.alert_id}')">Mark Resolved</button>` : 
+                            ''
+                        }
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        // Render responders
+        function renderResponders() {
+            const respondersList = document.getElementById('respondersList');
+            const availableResponders = Object.values(responders);
+            
+            if (availableResponders.length === 0) {
+                respondersList.innerHTML = `
+                    <div class="empty-state">
+                        <p>No responders available</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            respondersList.innerHTML = availableResponders.map(responder => `
+                <div class="responder-item">
+                    <div class="responder-info">
+                        <div class="responder-name">${responder.name}</div>
+                        <div class="responder-type">${responder.type.toUpperCase()}</div>
+                    </div>
+                    <span class="responder-status ${responder.is_available ? 'available' : 'busy'}">
+                        ${responder.is_available ? 'Available' : 'Busy'}
+                    </span>
+                </div>
+            `).join('');
+        }
+        
+        // Update statistics
+        function updateStats() {
+            const activeCount = Object.values(alerts).filter(a => 
+                a.status === 'triggered' || a.status === 'acknowledged' || a.status === 'dispatched'
+            ).length;
+            
+            const totalCount = Object.keys(alerts).length;
+            
+            const availableCount = Object.values(responders).filter(r => 
+                r.is_available
+            ).length;
+            
+            document.getElementById('activeAlerts').textContent = activeCount;
+            document.getElementById('totalAlerts').textContent = totalCount;
+            document.getElementById('availableResponders').textContent = availableCount;
+        }
+        
+        // Actions
+        function acknowledgeAlert(alertId) {
+            socket.emit('update_alert_status', {
+                alert_id: alertId,
+                status: 'acknowledged'
+            });
+        }
+        
+        function dispatchResponder(alertId) {
+            // Find first available responder
+            const available = Object.values(responders).find(r => r.is_available);
+            if (available) {
+                socket.emit('dispatch_responder', {
+                    alert_id: alertId,
+                    responder_id: available.responder_id
+                });
+            } else {
+                alert('No responders available');
+            }
+        }
+        
+        function resolveAlert(alertId) {
+            socket.emit('update_alert_status', {
+                alert_id: alertId,
+                status: 'resolved'
+            });
+        }
+        
+        function playAlertSound() {
+            // Play urgent siren sound using Web Audio API
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // Create a more urgent siren pattern
+                const now = audioContext.currentTime;
+                
+                // First tone - high pitch
+                const oscillator1 = audioContext.createOscillator();
+                const gainNode1 = audioContext.createGain();
+                oscillator1.connect(gainNode1);
+                gainNode1.connect(audioContext.destination);
+                oscillator1.frequency.value = 880; // High A
+                oscillator1.type = 'sine';
+                gainNode1.gain.setValueAtTime(0.3, now);
+                gainNode1.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                oscillator1.start(now);
+                oscillator1.stop(now + 0.3);
+                
+                // Second tone - low pitch (siren effect)
+                setTimeout(() => {
+                    const oscillator2 = audioContext.createOscillator();
+                    const gainNode2 = audioContext.createGain();
+                    oscillator2.connect(gainNode2);
+                    gainNode2.connect(audioContext.destination);
+                    oscillator2.frequency.value = 440; // Lower A
+                    oscillator2.type = 'sine';
+                    gainNode2.gain.setValueAtTime(0.3, audioContext.currentTime);
+                    gainNode2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+                    oscillator2.start();
+                    oscillator2.stop(audioContext.currentTime + 0.3);
+                }, 300);
+                
+                // Third tone - high pitch again
+                setTimeout(() => {
+                    const oscillator3 = audioContext.createOscillator();
+                    const gainNode3 = audioContext.createGain();
+                    oscillator3.connect(gainNode3);
+                    gainNode3.connect(audioContext.destination);
+                    oscillator3.frequency.value = 880;
+                    oscillator3.type = 'sine';
+                    gainNode3.gain.setValueAtTime(0.3, audioContext.currentTime);
+                    gainNode3.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+                    oscillator3.start();
+                    oscillator3.stop(audioContext.currentTime + 0.3);
+                }, 600);
+                
+                console.log('Alert sound played');
+            } catch (e) {
+                console.log('Audio not supported:', e);
+            }
+        }
+        
+        // Show browser notification
+        function showBrowserNotification(alertData) {
+            if ('Notification' in window) {
+                if (Notification.permission === 'granted') {
+                    const notification = new Notification('🚨 NEW EMERGENCY ALERT', {
+                        body: `User: ${alertData.user_name || 'Unknown'}\nPhone: ${alertData.phone || 'N/A'}\nThreat: ${alertData.threat_level || 'unknown'}`,
+                        icon: '🚨',
+                        requireInteraction: true,
+                        vibrate: [200, 100, 200, 100, 200],
+                        tag: alertData.alert_id
+                    });
+                    
+                    notification.onclick = function() {
+                        window.focus();
+                        if (alertData.latitude && alertData.longitude) {
+                            map.setView([alertData.latitude, alertData.longitude], 16);
+                        }
+                    };
+                } else if (Notification.permission !== 'denied') {
+                    Notification.requestPermission().then(permission => {
+                        if (permission === 'granted') {
+                            showBrowserNotification(alertData);
+                        }
+                    });
+                }
+            }
+        }
+        
+        // Flash page title for attention
+        let titleFlashInterval = null;
+        function flashTitle(message) {
+            if (titleFlashInterval) {
+                clearInterval(titleFlashInterval);
+            }
+            
+            const originalTitle = document.title;
+            let isOriginal = true;
+            let flashCount = 0;
+            
+            titleFlashInterval = setInterval(() => {
+                document.title = isOriginal ? message : originalTitle;
+                isOriginal = !isOriginal;
+                flashCount++;
+                
+                if (flashCount >= 20) { // Flash 10 times (20 changes)
+                    clearInterval(titleFlashInterval);
+                    document.title = originalTitle;
+                    titleFlashInterval = null;
+                }
+            }, 1000);
+        }
+        
+        // Request notification permission on load
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+        
+        // Refresh data every 30 seconds
+        setInterval(() => {
+            loadAlerts();
+            loadResponders();
+        }, 30000);
+    </script>
+</body>
+</html>
