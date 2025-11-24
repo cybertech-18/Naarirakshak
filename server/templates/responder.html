@@ -52,6 +52,75 @@
             gap: 15px;
         }
 
+        .logout-btn {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a6f);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .logout-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(238, 90, 111, 0.4);
+        }
+
+        .logout-btn:active {
+            transform: translateY(0);
+        }
+
+        .status-toggle {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 30px;
+        }
+
+        .status-toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 30px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 22px;
+            width: 22px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .toggle-slider {
+            background-color: #10b981;
+        }
+
+        input:checked + .toggle-slider:before {
+            transform: translateX(30px);
+        }
+        
         .status-indicator {
             width: 12px;
             height: 12px;
@@ -59,8 +128,11 @@
             background: #10b981;
             animation: pulse 2s infinite;
         }
-
-        @keyframes pulse {
+        
+        .status-indicator.inactive {
+            background: #ef4444;
+            animation: none;
+        }        @keyframes pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
         }
@@ -517,7 +589,33 @@
                 <button type="submit" class="login-btn">Login</button>
             </form>
             <p style="margin-top: 20px; font-size: 14px;">
-                Don't have access? <a href="#" style="color: #00b894;">Apply as volunteer</a>
+                Don't have access? <a href="#" id="showRegisterLink" style="color: #00b894;">Register as responder</a>
+            </p>
+        </div>
+    </div>
+    
+    <!-- Registration Screen -->
+    <div class="login-screen hidden" id="registerScreen">
+        <div class="login-card">
+            <div style="font-size: 64px; margin-bottom: 20px;">🛡️</div>
+            <h2>Responder Registration</h2>
+            <p>Join as a responder to help save lives</p>
+            <form class="login-form" id="responderRegisterForm">
+                <input type="text" id="regName" placeholder="Full Name" required>
+                <input type="tel" id="regPhone" placeholder="Phone Number" required>
+                <input type="password" id="regPassword" placeholder="Password" required>
+                <input type="password" id="regConfirmPassword" placeholder="Confirm Password" required>
+                <select id="regType" style="width: 100%; padding: 15px; margin-bottom: 20px; border: 2px solid #e5e7eb; border-radius: 10px; font-size: 16px;">
+                    <option value="volunteer">Volunteer</option>
+                    <option value="police">Police</option>
+                    <option value="medical">Medical</option>
+                    <option value="security">Security</option>
+                </select>
+                <input type="text" id="regLocation" placeholder="Location/Area" required>
+                <button type="submit" class="login-btn">Register</button>
+            </form>
+            <p style="margin-top: 20px; font-size: 14px;">
+                Already have account? <a href="#" id="showLoginLink" style="color: #00b894;">Login here</a>
             </p>
         </div>
     </div>
@@ -530,11 +628,19 @@
             </h1>
         </div>
         <div class="responder-info">
-            <div class="status-indicator"></div>
+            <label class="status-toggle">
+                <input type="checkbox" id="statusToggle" checked>
+                <span class="toggle-slider"></span>
+            </label>
+            <div class="status-indicator" id="statusIndicator"></div>
             <div class="responder-details">
                 <div class="responder-name" id="responderName">Loading...</div>
                 <div class="responder-type" id="responderType">Responder</div>
             </div>
+            <button class="logout-btn" id="logoutBtn">
+                <span>🚪</span>
+                Logout
+            </button>
         </div>
     </div>
 
@@ -593,22 +699,91 @@
         } else {
             // Hide login screen and load dashboard
             document.getElementById('loginScreen').classList.add('hidden');
+            document.getElementById('registerScreen').classList.add('hidden');
             loadResponderData();
         }
         
+        // Toggle between login and register
+        document.getElementById('showRegisterLink').addEventListener('click', (e) => {
+            e.preventDefault();
+            document.getElementById('loginScreen').classList.add('hidden');
+            document.getElementById('registerScreen').classList.remove('hidden');
+        });
+        
+        document.getElementById('showLoginLink').addEventListener('click', (e) => {
+            e.preventDefault();
+            document.getElementById('registerScreen').classList.add('hidden');
+            document.getElementById('loginScreen').classList.remove('hidden');
+        });
+        
         // Login form submission
-        document.getElementById('responderLoginForm').addEventListener('submit', (e) => {
+        document.getElementById('responderLoginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const loginId = document.getElementById('loginResponderId').value;
             const password = document.getElementById('loginPassword').value;
             
-            // For demo: accept any ID from 1-25 with password "responder123"
-            if (password === 'responder123' && loginId >= 1 && loginId <= 25) {
-                localStorage.setItem('responderId', loginId);
-                document.getElementById('loginScreen').classList.add('hidden');
-                loadResponderData();
-            } else {
-                alert('Invalid credentials. Use ID: 1-25, Password: responder123');
+            try {
+                const res = await fetch('/api/responder/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ phone: loginId, password: password })
+                });
+                
+                const data = await res.json();
+                
+                if (res.ok && data.success) {
+                    localStorage.setItem('responderId', data.responder.id);
+                    localStorage.setItem('responderData', JSON.stringify(data.responder));
+                    document.getElementById('loginScreen').classList.add('hidden');
+                    loadResponderData();
+                } else {
+                    alert(data.error || 'Invalid credentials. Demo: ID 1-25, Password: responder123');
+                }
+            } catch (err) {
+                alert('Login failed. Demo credentials: ID 1-25, Password: responder123');
+            }
+        });
+        
+        // Register form submission
+        document.getElementById('responderRegisterForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const name = document.getElementById('regName').value;
+            const phone = document.getElementById('regPhone').value;
+            const password = document.getElementById('regPassword').value;
+            const confirmPassword = document.getElementById('regConfirmPassword').value;
+            const type = document.getElementById('regType').value;
+            const location = document.getElementById('regLocation').value;
+            
+            if (password !== confirmPassword) {
+                alert('Passwords do not match!');
+                return;
+            }
+            
+            if (password.length < 6) {
+                alert('Password must be at least 6 characters!');
+                return;
+            }
+            
+            try {
+                const res = await fetch('/api/responder/register', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ name, phone, password, type, location })
+                });
+                
+                const data = await res.json();
+                
+                if (res.ok && data.success) {
+                    alert('Registration successful! Please login now.');
+                    document.getElementById('registerScreen').classList.add('hidden');
+                    document.getElementById('loginScreen').classList.remove('hidden');
+                    document.getElementById('responderRegisterForm').reset();
+                } else {
+                    alert(data.error || 'Registration failed');
+                }
+            } catch (err) {
+                alert('Registration failed. Please try again.');
             }
         });
 
@@ -621,6 +796,18 @@
                     responderData = data;
                     document.getElementById('responderName').textContent = data.name;
                     document.getElementById('responderType').textContent = data.type;
+                    
+                    // Set toggle status
+                    const toggle = document.getElementById('statusToggle');
+                    const indicator = document.getElementById('statusIndicator');
+                    toggle.checked = data.is_available;
+                    
+                    if (data.is_available) {
+                        indicator.classList.remove('inactive');
+                    } else {
+                        indicator.classList.add('inactive');
+                    }
+                    
                     loadAlerts();
                     loadStats();
                 })
@@ -629,6 +816,86 @@
                     showCustomNotification('Error', 'Failed to load your profile', 'error');
                 });
         }
+        
+        // Status toggle handler
+        document.getElementById('statusToggle').addEventListener('change', async (e) => {
+            const id = localStorage.getItem('responderId');
+            const indicator = document.getElementById('statusIndicator');
+            
+            try {
+                const res = await fetch(`/api/responder/${id}/toggle-status`, {
+                    method: 'POST'
+                });
+                
+                const data = await res.json();
+                
+                if (data.success) {
+                    if (data.is_available) {
+                        indicator.classList.remove('inactive');
+                        showCustomNotification('Status Updated', 'You are now ACTIVE and ready to respond', 'success');
+                    } else {
+                        indicator.classList.add('inactive');
+                        showCustomNotification('Status Updated', 'You are now INACTIVE', 'info');
+                    }
+                } else {
+                    // Revert toggle if failed
+                    e.target.checked = !e.target.checked;
+                    showCustomNotification('Error', 'Failed to update status', 'error');
+                }
+            } catch (err) {
+                // Revert toggle if failed
+                e.target.checked = !e.target.checked;
+                showCustomNotification('Error', 'Failed to update status', 'error');
+            }
+        });
+
+        // Logout handler
+        document.getElementById('logoutBtn').addEventListener('click', async () => {
+            if (confirm('Are you sure you want to logout?')) {
+                const id = localStorage.getItem('responderId');
+                
+                try {
+                    // Set status to inactive before logout
+                    await fetch(`/api/responder/${id}/toggle-status`, {
+                        method: 'POST'
+                    });
+                    
+                    // Call logout endpoint
+                    const res = await fetch('/api/responder/logout', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ responder_id: id })
+                    });
+                    
+                    const data = await res.json();
+                    
+                    if (data.success) {
+                        // Clear local storage
+                        localStorage.removeItem('responderId');
+                        localStorage.removeItem('responderName');
+                        
+                        showCustomNotification('Logged Out', 'You have been logged out successfully', 'success');
+                        
+                        // Redirect to login screen after 1 second
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1000);
+                    } else {
+                        showCustomNotification('Error', 'Failed to logout', 'error');
+                    }
+                } catch (err) {
+                    // Clear local storage anyway
+                    localStorage.removeItem('responderId');
+                    localStorage.removeItem('responderName');
+                    showCustomNotification('Logged Out', 'Session ended', 'info');
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1000);
+                }
+            }
+        });
 
         // Load active alerts
         function loadAlerts() {

@@ -194,7 +194,7 @@ def trigger_sos():
         active_alerts[alert_id] = alert_dict
         
         # Broadcast to connected control centers
-        socketio.emit('alert_triggered', alert_dict)
+        socketio.emit('alert_triggered', alert_dict, namespace='/')
         
         # Simulate mesh network propagation
         if app.config['MESH_NETWORK_ENABLED']:
@@ -260,7 +260,7 @@ def cancel_sos():
         socketio.emit('alert_cancelled', {
             'alert_id': alert_id,
             'cancelled_at': alert.resolved_at.isoformat()
-        })
+        }, namespace='/')
         
         session.close()
         
@@ -542,7 +542,7 @@ def approve_volunteer():
         socketio.emit('volunteer_approved', {
             'volunteer_id': volunteer_id,
             'name': volunteer.name
-        }, broadcast=True)
+        }, namespace='/')
         
         return jsonify({'success': True, 'message': 'Volunteer approved'})
         
@@ -744,7 +744,7 @@ def respond_to_alert():
         socketio.emit('responder_assigned', {
             'alert_id': alert_id,
             'responder_id': responder_id
-        }, broadcast=True)
+        }, namespace='/')
         
         return jsonify({'success': True, 'message': 'Response recorded'})
         
@@ -789,7 +789,7 @@ def complete_alert():
         # Notify via WebSocket
         socketio.emit('alert_resolved', {
             'alert_id': alert_id
-        }, broadcast=True)
+        }, namespace='/')
         
         return jsonify({'success': True, 'message': 'Alert completed'})
         
@@ -825,12 +825,203 @@ def register_volunteer():
         session.close()
         
         # Notify admin via WebSocket
-        socketio.emit('new_volunteer', volunteer_data, broadcast=True)
+        socketio.emit('new_volunteer', volunteer_data, namespace='/')
         
         return jsonify({
             'success': True,
             'message': 'Application submitted',
             'volunteer': volunteer_data
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/responder/register', methods=['POST'])
+def register_responder():
+    """New responder self-registration"""
+    try:
+        data = request.json
+        name = data.get('name')
+        phone = data.get('phone')
+        password = data.get('password')
+        responder_type = data.get('type', 'volunteer')
+        location = data.get('location', '')
+        
+        if not name or not phone or not password:
+            return jsonify({'error': 'Name, phone, and password required'}), 400
+        
+        session = get_session(engine)
+        
+        # Check if phone already exists
+        existing = session.query(Responder).filter_by(phone=phone).first()
+        if existing:
+            session.close()
+            return jsonify({'error': 'Phone number already registered'}), 400
+        
+        # Create responder
+        responder = Responder(
+            responder_id=f'R{str(uuid.uuid4())[:8]}',
+            name=name,
+            type=responder_type,
+            phone=phone,
+            password=password,  # In production, hash this!
+            latitude=28.6139 + (hash(phone) % 100) / 10000,
+            longitude=77.2090 + (hash(phone) % 100) / 10000,
+            is_available=True,
+            rating=5.0
+        )
+        
+        session.add(responder)
+        session.commit()
+        
+        responder_dict = responder.to_dict()
+        session.close()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Registration successful',
+            'responder': responder_dict
+        }), 201
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/responder/login', methods=['POST'])
+def responder_login():
+    """Responder login with phone and password"""
+    try:
+        data = request.json
+        phone = data.get('phone')
+        password = data.get('password')
+        
+        if not phone or not password:
+            return jsonify({'error': 'Phone and password required'}), 400
+        
+        session = get_session(engine)
+        
+        # For demo: accept responder ID 1-25 with password "responder123"
+        if password == 'responder123':
+            try:
+                responder_id = int(phone)
+                if 1 <= responder_id <= 25:
+                    responder = session.query(Responder).filter_by(id=responder_id).first()
+                    if responder:
+                        session.close()
+                        return jsonify({
+                            'success': True,
+                            'responder': responder.to_dict()
+                        })
+            except:
+                pass
+        
+        # Check phone and password
+        responder = session.query(Responder).filter_by(phone=phone).first()
+        if not responder or (hasattr(responder, 'password') and responder.password != password):
+            session.close()
+            return jsonify({'error': 'Invalid credentials'}), 401
+        
+        session.close()
+        
+        return jsonify({
+            'success': True,
+            'responder': responder.to_dict()
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/responder/<int:responder_id>/toggle-status', methods=['POST'])
+def toggle_responder_status(responder_id):
+    """Toggle responder active/inactive status"""
+    try:
+        session = get_session(engine)
+        
+        responder = session.query(Responder).filter_by(id=responder_id).first()
+        if not responder:
+            session.close()
+            return jsonify({'error': 'Responder not found'}), 404
+        
+        # Toggle availability
+        responder.is_available = not responder.is_available
+        
+        session.commit()
+        
+        new_status = 'active' if responder.is_available else 'inactive'
+        session.close()
+        
+        # Notify via WebSocket
+        socketio.emit('responder_status_changed', {
+            'responder_id': responder_id,
+            'is_available': responder.is_available
+        }, namespace='/')
+        
+        return jsonify({
+            'success': True,
+            'is_available': responder.is_available,
+            'message': f'Status changed to {new_status}'
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/responder/logout', methods=['POST'])
+def responder_logout():
+    """Logout responder and set status to inactive"""
+    try:
+        data = request.json
+        responder_id = data.get('responder_id')
+        
+        if not responder_id:
+            return jsonify({'error': 'Responder ID required'}), 400
+        
+        session = get_session(engine)
+        
+        # Get responder
+        responder = session.query(Responder).filter_by(id=responder_id).first()
+        
+        if not responder:
+            session.close()
+            return jsonify({'error': 'Responder not found'}), 404
+        
+        # Set status to inactive
+        responder.is_available = False
+        session.commit()
+        
+        session.close()
+        
+        # Notify via WebSocket
+        socketio.emit('responder_logged_out', {
+            'responder_id': responder_id,
+            'timestamp': datetime.now(timezone.utc).isoformat()
+        }, namespace='/')
+        
+        return jsonify({
+            'success': True,
+            'message': 'Logged out successfully'
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/responders/all', methods=['GET'])
+def get_all_responders_admin():
+    """Get all responders (active and inactive) for admin"""
+    try:
+        session = get_session(engine)
+        
+        responders = session.query(Responder).all()
+        responders_data = [r.to_dict() for r in responders]
+        
+        session.close()
+        
+        return jsonify({
+            'responders': responders_data,
+            'count': len(responders_data)
         })
         
     except Exception as e:
@@ -905,7 +1096,7 @@ def handle_location_update(data):
             'latitude': latitude,
             'longitude': longitude,
             'timestamp': location_update.timestamp.isoformat()
-        }, broadcast=True)
+        }, namespace='/')
         
         session.close()
         
@@ -954,7 +1145,7 @@ def handle_dispatch_responder(data):
                 'alert_id': alert_id,
                 'status': 'dispatched',
                 'responder': responder.to_dict()
-            }, broadcast=True)
+            }, namespace='/')
         
         session.close()
         
@@ -994,7 +1185,7 @@ def handle_update_alert_status(data):
                 'alert_id': alert_id,
                 'status': new_status,
                 'timestamp': datetime.now(timezone.utc).isoformat()
-            })
+            }, namespace='/')
         
         session.close()
         
@@ -1160,22 +1351,29 @@ if __name__ == '__main__':
     
     print(f"""
     ╔═══════════════════════════════════════════════════╗
-    ║   Women's Safety System - Control Center         ║
+    ║   🛡️  Naarirakshak - Women's Safety System        ║
+    ║                      v1.1                         ║
     ║                                                   ║
-    ║   🌐 Local Access:                                ║
-    ║      {protocol}://localhost:{port}                        ║
+    ║   🌐 Server Running:                              ║
+    ║      Local:   {protocol}://localhost:{port}               ║
+    ║      Network: {protocol}://{local_ip}:{port}         ║
     ║                                                   ║
-    ║   📱 Mobile/Network Access:                       ║
-    ║      {protocol}://{local_ip}:{port}                ║
-    ║                                                   ║
-    ║   {'🔒 HTTPS Enabled (Geolocation works!)' if use_ssl else '⚠️  HTTP Mode (Geolocation may not work on mobile)'}      ║
+    ║   {'🔒 HTTPS Enabled (Geolocation works!)' if use_ssl else '⚠️  HTTP Mode (Geolocation may not work)'}          ║
     ║   {'   Accept certificate warning on first access' if use_ssl else '   Run ./setup_https.sh to enable HTTPS'}       ║
     ║                                                   ║
-    ║   📊 Dashboard: /{' ' * 30}║
-    ║   📱 Mobile App: /app{' ' * 25}║
-    ║   🔧 API Docs: /api/health{' ' * 21}║
+    ║   📊 Available Dashboards:                        ║
+    ║      • Control Center:  {protocol}://{local_ip}:{port}/          ║
+    ║      • Mobile App:      {protocol}://{local_ip}:{port}/app      ║
+    ║      • Admin Panel:     {protocol}://{local_ip}:{port}/admin    ║
+    ║      • Responder:       {protocol}://{local_ip}:{port}/responder║
     ║                                                   ║
-    ║   Press Ctrl+C to stop                           ║
+    ║   🔧 API Endpoints:                               ║
+    ║      • Health Check:    {protocol}://{local_ip}:{port}/api/health║
+    ║      • Register User:   POST /api/register        ║
+    ║      • Trigger SOS:     POST /api/sos/trigger     ║
+    ║                                                   ║
+    ║   💡 Access from mobile: Use network URL above    ║
+    ║   ⚡ Press Ctrl+C to stop the server              ║
     ╚═══════════════════════════════════════════════════╝
     """)
     

@@ -647,12 +647,14 @@
 
         // Load active responders
         function loadResponders() {
-            fetch('/api/responders')
+            fetch('/api/admin/responders/all')
                 .then(res => res.json())
                 .then(data => {
                     const container = document.getElementById('respondersList');
                     
-                    if (data.length === 0) {
+                    const responders = data.responders || [];
+                    
+                    if (responders.length === 0) {
                         container.innerHTML = `
                             <div class="empty-state">
                                 <div class="empty-state-icon">👥</div>
@@ -663,17 +665,20 @@
                         return;
                     }
 
-                    container.innerHTML = data.map(responder => `
+                    container.innerHTML = responders.map(responder => `
                         <div class="volunteer-card">
                             <div class="volunteer-info">
                                 <div class="volunteer-name">
                                     ${responder.name}
-                                    <span class="status-badge status-active">Active</span>
+                                    <span class="status-badge ${responder.is_available ? 'status-active' : 'status-inactive'}">
+                                        ${responder.is_available ? 'Active' : 'Inactive'}
+                                    </span>
                                 </div>
                                 <div class="volunteer-details">
                                     <div class="volunteer-detail">🏷️ ${responder.type}</div>
                                     <div class="volunteer-detail">📞 ${responder.phone || 'N/A'}</div>
-                                    <div class="volunteer-detail">📍 ${getDistance(responder.latitude, responder.longitude)} km</div>
+                                    <div class="volunteer-detail">⭐ Rating: ${responder.rating || 5.0}</div>
+                                    <div class="volunteer-detail">📊 Responses: ${responder.total_responses || 0}</div>
                                 </div>
                             </div>
                             <div class="volunteer-actions">
@@ -683,6 +688,17 @@
                             </div>
                         </div>
                     `).join('');
+                })
+                .catch(err => {
+                    console.error('Error loading responders:', err);
+                    const container = document.getElementById('respondersList');
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">⚠️</div>
+                            <h3>Error Loading Responders</h3>
+                            <p>Please refresh the page</p>
+                        </div>
+                    `;
                 });
         }
 
