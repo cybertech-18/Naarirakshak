@@ -617,7 +617,16 @@
                 
                 socket.on('responder_dispatched', (data) => {
                     if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+                    playNotificationSound();
                     showNotification('Responder Dispatched', `${data.responder.name} is on the way!`);
+                });
+                
+                socket.on('responder_assigned', (data) => {
+                    if (currentAlert && data.alert_id === currentAlert.alert_id) {
+                        if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+                        playNotificationSound();
+                        showNotification('Responder Assigned', 'A responder is coming to help you!');
+                    }
                 });
                 
                 socket.on('alert_status_changed', (data) => {
@@ -629,10 +638,17 @@
         }
         
         function showNotification(title, message) {
+            if (!title || !message) {
+                console.warn('showNotification called with empty title or message');
+                return;
+            }
             // Vibrate only
             if (navigator.vibrate) {
                 navigator.vibrate([200, 100, 200]);
             }
+            
+            // Play sound
+            playNotificationSound();
             
             // Show notification
             if ('Notification' in window && Notification.permission === 'granted') {
@@ -644,6 +660,46 @@
                 });
             } else {
                 alert(`${title}: ${message}`);
+            }
+        }
+        
+        function playNotificationSound() {
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const now = audioContext.currentTime;
+                
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                oscillator.frequency.value = 600;
+                oscillator.type = 'sine';
+                gainNode.gain.setValueAtTime(0.2, now);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                oscillator.start(now);
+                oscillator.stop(now + 0.2);
+            } catch (e) {
+                console.error('Failed to play sound:', e);
+            }
+        }
+        
+        function playNotificationSound() {
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const now = audioContext.currentTime;
+                
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                oscillator.frequency.value = 600;
+                oscillator.type = 'sine';
+                gainNode.gain.setValueAtTime(0.2, now);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                oscillator.start(now);
+                oscillator.stop(now + 0.2);
+            } catch (e) {
+                console.error('Failed to play sound:', e);
             }
         }
         
@@ -911,29 +967,71 @@
         
         // Share Location
         document.getElementById('shareLocationBtn').addEventListener('click', () => {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition((pos) => {
+            if (!navigator.geolocation) {
+                alert('Location sharing is not supported on this device.');
+                return;
+            }
+            
+            // Show loading state
+            const btn = document.getElementById('shareLocationBtn');
+            const originalText = btn.textContent;
+            btn.textContent = '📍 Getting location...';
+            btn.disabled = true;
+            
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
                     const lat = pos.coords.latitude;
                     const lon = pos.coords.longitude;
                     const url = `https://maps.google.com/?q=${lat},${lon}`;
                     
+                    // Reset button
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                    
+                    // Try native share API first
                     if (navigator.share) {
                         navigator.share({
                             title: 'My Current Location',
-                            text: 'I am sharing my location with you.',
+                            text: `I am at: ${lat.toFixed(6)}, ${lon.toFixed(6)}`,
                             url: url
-                        }).catch(() => {
-                            copyToClipboard(url);
+                        }).then(() => {
+                            showNotification('Location Shared', 'Your location has been shared successfully');
+                        }).catch((err) => {
+                            if (err.name !== 'AbortError') {
+                                // User didn't cancel, try clipboard
+                                copyToClipboard(url);
+                            }
                         });
                     } else {
+                        // Fallback to clipboard
                         copyToClipboard(url);
                     }
-                }, () => {
-                    alert('Unable to get your location. Please enable location services.');
-                });
-            } else {
-                alert('Location sharing is not supported on this device.');
-            }
+                },
+                (err) => {
+                    // Reset button
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                    
+                    let errorMsg = 'Unable to get your location.';
+                    switch(err.code) {
+                        case err.PERMISSION_DENIED:
+                            errorMsg = 'Location permission denied. Please enable location access in your browser settings.';
+                            break;
+                        case err.POSITION_UNAVAILABLE:
+                            errorMsg = 'Location information is unavailable. Please try again.';
+                            break;
+                        case err.TIMEOUT:
+                            errorMsg = 'Location request timed out. Please try again.';
+                            break;
+                    }
+                    alert(errorMsg);
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
+                }
+            );
         });
         
         function copyToClipboard(text) {

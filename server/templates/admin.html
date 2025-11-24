@@ -600,6 +600,10 @@
                     document.getElementById('pendingRequests').textContent = data.pending_volunteers || 0;
                     document.getElementById('activeAlerts').textContent = data.active_alerts || 0;
                     document.getElementById('todayResponses').textContent = data.today_responses || 0;
+                })
+                .catch(err => {
+                    console.error('Error loading stats:', err);
+                    showNotification('Error', 'Failed to load statistics', 'error');
                 });
         }
 

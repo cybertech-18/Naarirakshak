@@ -757,6 +757,27 @@
             }
         });
         
+        socket.on('responder_assigned', (data) => {
+            console.log('Responder assigned:', data);
+            if (alerts[data.alert_id]) {
+                alerts[data.alert_id].status = 'dispatched';
+                renderAlerts();
+                updateStats();
+                updateAlertMarkers();
+                
+                // Play notification sound
+                playNotificationSound();
+                
+                // Show notification
+                if ('Notification' in window && Notification.permission === 'granted') {
+                    new Notification('Responder Assigned', {
+                        body: `A responder has been assigned to alert #${data.alert_id.substring(0, 8)}`,
+                        icon: '🚨'
+                    });
+                }
+            }
+        });
+        
         socket.on('location_updated', (data) => {
             console.log('Location updated:', data);
             if (alerts[data.alert_id]) {
@@ -790,18 +811,24 @@
         async function loadResponders() {
             try {
                 const response = await fetch('/api/responders');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch responders');
+                }
                 const data = await response.json();
                 
                 responders = {};
-                data.responders.forEach(responder => {
-                    responders[responder.responder_id] = responder;
-                });
+                if (data.responders && Array.isArray(data.responders)) {
+                    data.responders.forEach(responder => {
+                        responders[responder.responder_id] = responder;
+                    });
+                }
                 
                 renderResponders();
                 updateStats();
                 updateResponderMarkers();
             } catch (error) {
                 console.error('Error loading responders:', error);
+                // Don't break the dashboard, just log the error
             }
         }
         
@@ -907,6 +934,10 @@
         
         // Actions
         function acknowledgeAlert(alertId) {
+            if (!alertId) {
+                console.error('acknowledgeAlert called with invalid alertId');
+                return;
+            }
             socket.emit('update_alert_status', {
                 alert_id: alertId,
                 status: 'acknowledged'
@@ -914,6 +945,10 @@
         }
         
         function dispatchResponder(alertId) {
+            if (!alertId) {
+                console.error('dispatchResponder called with invalid alertId');
+                return;
+            }
             // Find first available responder
             const available = Object.values(responders).find(r => r.is_available);
             if (available) {
@@ -927,6 +962,10 @@
         }
         
         function resolveAlert(alertId) {
+            if (!alertId) {
+                console.error('resolveAlert called with invalid alertId');
+                return;
+            }
             socket.emit('update_alert_status', {
                 alert_id: alertId,
                 status: 'resolved'

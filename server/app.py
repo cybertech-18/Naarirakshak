@@ -189,12 +189,16 @@ def trigger_sos():
         
         alert_dict = alert.to_dict(include_sensitive=True)
         alert_dict['user'] = user.to_dict()
+        alert_dict['user_name'] = user.name  # Add user name for notifications
         
         # Store in active alerts
         active_alerts[alert_id] = alert_dict
         
         # Broadcast to connected control centers
         socketio.emit('alert_triggered', alert_dict, namespace='/')
+        
+        # Broadcast to responders
+        socketio.emit('new_alert', alert_dict, namespace='/')
         
         # Simulate mesh network propagation
         if app.config['MESH_NETWORK_ENABLED']:
