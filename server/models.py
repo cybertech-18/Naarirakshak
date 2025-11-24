@@ -227,10 +227,81 @@ class Responder(Base):
             'responder_id': self.responder_id,
             'name': self.name,
             'type': self.type,
+            'phone': self.phone,
             'is_available': self.is_available,
             'rating': self.rating,
             'latitude': self.latitude,
-            'longitude': self.longitude
+            'longitude': self.longitude,
+            'total_responses': self.total_responses
+        }
+
+
+class VolunteerRequest(Base):
+    """Volunteer application model"""
+    __tablename__ = 'volunteer_requests'
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100))
+    phone = Column(String(20))
+    location = Column(String(200))
+    
+    # Status
+    status = Column(String(20), default='pending')  # pending, approved, rejected
+    
+    # Timestamps
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    reviewed_at = Column(DateTime)
+    reviewed_by = Column(String(100))
+    
+    def to_dict(self):
+        # Helper to format datetime with timezone
+        def format_dt(dt):
+            if not dt:
+                return None
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.isoformat()
+        
+        return {
+            'id': self.id,
+            'name': self.name,
+            'phone': self.phone,
+            'location': self.location,
+            'status': self.status,
+            'created_at': format_dt(self.created_at),
+            'reviewed_at': format_dt(self.reviewed_at)
+        }
+
+
+class AlertResponse(Base):
+    """Track responder responses to alerts"""
+    __tablename__ = 'alert_responses'
+    
+    id = Column(Integer, primary_key=True)
+    alert_id = Column(Integer, ForeignKey('alerts.id'))
+    responder_id = Column(Integer, ForeignKey('responders.id'))
+    
+    # Response details
+    responded_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    completed_at = Column(DateTime)
+    status = Column(String(20), default='responding')  # responding, completed, cancelled
+    
+    def to_dict(self):
+        # Helper to format datetime with timezone
+        def format_dt(dt):
+            if not dt:
+                return None
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.isoformat()
+        
+        return {
+            'id': self.id,
+            'alert_id': self.alert_id,
+            'responder_id': self.responder_id,
+            'responded_at': format_dt(self.responded_at),
+            'completed_at': format_dt(self.completed_at),
+            'status': self.status
         }
 
 

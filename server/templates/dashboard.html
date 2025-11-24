@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Women's Safety System - Control Center</title>
+    <title>Naarirakshak - Control Center v1.1</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         * {
@@ -14,21 +14,42 @@
         
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
             color: #333;
             min-height: 100vh;
         }
         
         .header {
-            background: rgba(255, 255, 255, 0.95);
-            padding: 20px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            background: rgba(255, 255, 255, 0.98);
+            padding: 25px 30px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
         }
         
         .header h1 {
-            color: #667eea;
-            font-size: 28px;
+            color: #00b4d8;
+            font-size: 32px;
             margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .version-badge {
+            background: linear-gradient(135deg, #4facfe, #00f2fe);
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
         }
         
         .header p {
@@ -298,6 +319,96 @@
             opacity: 0.3;
         }
         
+        /* Custom Notification System */
+        .notification-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10000;
+            max-width: 420px;
+        }
+
+        .custom-notification {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 12px 48px rgba(0, 0, 0, 0.35);
+            padding: 20px;
+            margin-bottom: 15px;
+            animation: slideIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            border-left: 5px solid #ef4444;
+            display: flex;
+            align-items: start;
+            gap: 15px;
+            backdrop-filter: blur(10px);
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(450px) scale(0.8);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0) scale(1);
+                opacity: 1;
+            }
+        }
+
+        .notification-icon {
+            font-size: 36px;
+            flex-shrink: 0;
+            animation: bounceIn 0.6s;
+        }
+
+        @keyframes bounceIn {
+            0% { transform: scale(0); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+
+        .notification-content {
+            flex: 1;
+        }
+
+        .notification-title {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 6px;
+            font-size: 17px;
+        }
+
+        .notification-message {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 8px;
+            line-height: 1.5;
+            white-space: pre-line;
+        }
+
+        .notification-time {
+            color: #999;
+            font-size: 12px;
+            font-style: italic;
+        }
+
+        .notification-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            color: #999;
+            cursor: pointer;
+            padding: 0;
+            width: 28px;
+            height: 28px;
+            flex-shrink: 0;
+            transition: all 0.2s;
+            border-radius: 4px;
+        }
+
+        .notification-close:hover {
+            color: #333;
+            background: #f3f4f6;
+        }
+        
         @media (max-width: 968px) {
             .main-content {
                 grid-template-columns: 1fr;
@@ -345,11 +456,16 @@
 </head>
 <body>
     <div class="header">
-        <h1>🛡️ Women's Safety System - Control Center</h1>
+        <div class="header-left">
+            <h1>
+                🛡️ Naarirakshak Control Center
+                <span class="version-badge">v1.1</span>
+            </h1>
+        </div>
         <p>
             <span class="connection-status" id="connectionStatus"></span>
             <span id="connectionText">Connecting...</span> | 
-            Real-time monitoring and emergency response coordination
+            Real-time monitoring and emergency response
         </p>
     </div>
     
@@ -871,32 +987,67 @@
             }
         }
         
-        // Show browser notification
-        function showBrowserNotification(alertData) {
-            if ('Notification' in window) {
-                if (Notification.permission === 'granted') {
-                    const notification = new Notification('🚨 NEW EMERGENCY ALERT', {
-                        body: `User: ${alertData.user_name || 'Unknown'}\nPhone: ${alertData.phone || 'N/A'}\nThreat: ${alertData.threat_level || 'unknown'}`,
-                        icon: '🚨',
-                        requireInteraction: true,
-                        vibrate: [200, 100, 200, 100, 200],
-                        tag: alertData.alert_id
-                    });
-                    
-                    notification.onclick = function() {
-                        window.focus();
-                        if (alertData.latitude && alertData.longitude) {
-                            map.setView([alertData.latitude, alertData.longitude], 16);
-                        }
-                    };
-                } else if (Notification.permission !== 'denied') {
-                    Notification.requestPermission().then(permission => {
-                        if (permission === 'granted') {
-                            showBrowserNotification(alertData);
-                        }
-                    });
-                }
+        // Custom notification system - replaces browser notifications
+        function showCustomNotification(title, message, type = 'alert', data = {}) {
+            const container = document.getElementById('customNotifications') || createNotificationContainer();
+            const notification = document.createElement('div');
+            notification.className = 'custom-notification';
+            notification.style.borderLeftColor = type === 'alert' ? '#ef4444' : '#3b82f6';
+            
+            const icons = {
+                alert: '🚨',
+                success: '✓',
+                info: 'ℹ',
+                warning: '⚠'
+            };
+
+            notification.innerHTML = `
+                <div class="notification-icon">${icons[type] || '🔔'}</div>
+                <div class="notification-content">
+                    <div class="notification-title">${title}</div>
+                    <div class="notification-message">${message}</div>
+                    <div class="notification-time">${new Date().toLocaleTimeString()}</div>
+                </div>
+                <button class="notification-close" onclick="this.parentElement.remove()">×</button>
+            `;
+
+            // Add click handler for alerts with location
+            if (data.latitude && data.longitude) {
+                notification.style.cursor = 'pointer';
+                notification.onclick = function(e) {
+                    if (!e.target.classList.contains('notification-close')) {
+                        map.setView([data.latitude, data.longitude], 16);
+                        notification.remove();
+                    }
+                };
             }
+
+            container.appendChild(notification);
+
+            // Auto-remove after 10 seconds
+            setTimeout(() => {
+                if (notification.parentElement) {
+                    notification.remove();
+                }
+            }, 10000);
+        }
+
+        function createNotificationContainer() {
+            const container = document.createElement('div');
+            container.id = 'customNotifications';
+            container.className = 'notification-container';
+            document.body.appendChild(container);
+            return container;
+        }
+        
+        // Show browser notification - now uses custom notification
+        function showBrowserNotification(alertData) {
+            showCustomNotification(
+                '🚨 NEW EMERGENCY ALERT',
+                `User: ${alertData.user_name || 'Unknown'}\nPhone: ${alertData.phone || 'N/A'}\nThreat: ${alertData.threat_level || 'unknown'}`,
+                'alert',
+                alertData
+            );
         }
         
         // Flash page title for attention

@@ -13,7 +13,8 @@ import os
 from config import config
 from models import (
     init_db, get_session, User, Alert, LocationUpdate, 
-    Responder, MeshNode, AuditLog, AlertStatus, ThreatLevel
+    Responder, MeshNode, AuditLog, AlertStatus, ThreatLevel,
+    VolunteerRequest, AlertResponse
 )
 from encryption import get_encryption_manager
 from ai_engine import get_threat_engine
@@ -433,6 +434,403 @@ def get_mesh_nodes():
         return jsonify({
             'nodes': nodes_data,
             'count': len(nodes_data)
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ============ v1.1 NEW ENDPOINTS ============
+
+@app.route('/admin')
+def admin_panel():
+    """Serve admin control panel"""
+    return render_template('admin.html')
+
+
+@app.route('/responder')
+def responder_dashboard():
+    """Serve responder dashboard"""
+    return render_template('responder.html')
+
+
+@app.route('/api/admin/stats', methods=['GET'])
+def get_admin_stats():
+    """Get admin dashboard statistics"""
+    try:
+        session = get_session(engine)
+        
+        total_responders = session.query(Responder).count()
+        pending_volunteers = session.query(VolunteerRequest).filter_by(status='pending').count()
+        active_alerts = session.query(Alert).filter(
+            Alert.status.in_([AlertStatus.TRIGGERED, AlertStatus.ACKNOWLEDGED, AlertStatus.DISPATCHED])
+        ).count()
+        
+        # Today's responses
+        today = datetime.now(timezone.utc).date()
+        today_responses = session.query(AlertResponse).filter(
+            AlertResponse.responded_at >= datetime.combine(today, datetime.min.time()).replace(tzinfo=timezone.utc)
+        ).count()
+        
+        session.close()
+        
+        return jsonify({
+            'total_responders': total_responders,
+            'pending_volunteers': pending_volunteers,
+            'active_alerts': active_alerts,
+            'today_responses': today_responses
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/volunteers/pending', methods=['GET'])
+def get_pending_volunteers():
+    """Get pending volunteer applications"""
+    try:
+        session = get_session(engine)
+        
+        volunteers = session.query(VolunteerRequest).filter_by(status='pending').all()
+        volunteers_data = [v.to_dict() for v in volunteers]
+        
+        session.close()
+        
+        return jsonify(volunteers_data)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/volunteer/approve', methods=['POST'])
+def approve_volunteer():
+    """Approve volunteer and convert to responder"""
+    try:
+        data = request.json
+        volunteer_id = data.get('volunteer_id')
+        
+        session = get_session(engine)
+        
+        volunteer = session.query(VolunteerRequest).filter_by(id=volunteer_id).first()
+        if not volunteer:
+            session.close()
+            return jsonify({'error': 'Volunteer not found'}), 404
+        
+        # Create responder from volunteer
+        responder = Responder(
+            responder_id=f'V{str(uuid.uuid4())[:8]}',
+            name=volunteer.name,
+            type='Volunteer',
+            phone=volunteer.phone,
+            latitude=28.6139 + (hash(volunteer.name) % 100) / 10000,  # Random near Delhi
+            longitude=77.2090 + (hash(volunteer.name) % 100) / 10000,
+            is_available=True,
+            rating=5.0
+        )
+        
+        session.add(responder)
+        
+        # Update volunteer status
+        volunteer.status = 'approved'
+        volunteer.reviewed_at = datetime.now(timezone.utc)
+        volunteer.reviewed_by = 'admin'
+        
+        session.commit()
+        session.close()
+        
+        # Notify via WebSocket
+        socketio.emit('volunteer_approved', {
+            'volunteer_id': volunteer_id,
+            'name': volunteer.name
+        }, broadcast=True)
+        
+        return jsonify({'success': True, 'message': 'Volunteer approved'})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/volunteer/reject', methods=['POST'])
+def reject_volunteer():
+    """Reject volunteer application"""
+    try:
+        data = request.json
+        volunteer_id = data.get('volunteer_id')
+        
+        session = get_session(engine)
+        
+        volunteer = session.query(VolunteerRequest).filter_by(id=volunteer_id).first()
+        if not volunteer:
+            session.close()
+            return jsonify({'error': 'Volunteer not found'}), 404
+        
+        volunteer.status = 'rejected'
+        volunteer.reviewed_at = datetime.now(timezone.utc)
+        volunteer.reviewed_by = 'admin'
+        
+        session.commit()
+        session.close()
+        
+        return jsonify({'success': True, 'message': 'Volunteer rejected'})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/responder/add', methods=['POST'])
+def admin_add_responder():
+    """Admin adds new responder directly"""
+    try:
+        data = request.json
+        
+        session = get_session(engine)
+        
+        responder = Responder(
+            responder_id=f'R{str(uuid.uuid4())[:8]}',
+            name=data['name'],
+            type=data['type'],
+            phone=data.get('phone', ''),
+            latitude=28.6139 + (hash(data['name']) % 100) / 10000,
+            longitude=77.2090 + (hash(data['name']) % 100) / 10000,
+            is_available=True,
+            rating=5.0
+        )
+        
+        session.add(responder)
+        session.commit()
+        session.close()
+        
+        return jsonify({'success': True, 'message': 'Responder added'})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/responder/remove', methods=['POST'])
+def admin_remove_responder():
+    """Admin removes a responder"""
+    try:
+        data = request.json
+        responder_id = data.get('responder_id')
+        
+        session = get_session(engine)
+        
+        responder = session.query(Responder).filter_by(id=responder_id).first()
+        if responder:
+            session.delete(responder)
+            session.commit()
+        
+        session.close()
+        
+        return jsonify({'success': True, 'message': 'Responder removed'})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/responder/<int:responder_id>', methods=['GET'])
+def get_responder(responder_id):
+    """Get responder details"""
+    try:
+        session = get_session(engine)
+        
+        responder = session.query(Responder).filter_by(id=responder_id).first()
+        if not responder:
+            session.close()
+            return jsonify({'error': 'Responder not found'}), 404
+        
+        data = responder.to_dict()
+        session.close()
+        
+        return jsonify(data)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/responder/<int:responder_id>/stats', methods=['GET'])
+def get_responder_stats(responder_id):
+    """Get responder statistics"""
+    try:
+        session = get_session(engine)
+        
+        responder = session.query(Responder).filter_by(id=responder_id).first()
+        if not responder:
+            session.close()
+            return jsonify({'error': 'Responder not found'}), 404
+        
+        total_responses = session.query(AlertResponse).filter_by(responder_id=responder_id).count()
+        
+        # Today's completions
+        today = datetime.now(timezone.utc).date()
+        completed_today = session.query(AlertResponse).filter(
+            AlertResponse.responder_id == responder_id,
+            AlertResponse.status == 'completed',
+            AlertResponse.completed_at >= datetime.combine(today, datetime.min.time()).replace(tzinfo=timezone.utc)
+        ).count()
+        
+        session.close()
+        
+        return jsonify({
+            'total_responses': total_responses,
+            'completed_today': completed_today,
+            'avg_response_time': '5 min'  # Placeholder
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/alerts/active', methods=['GET'])
+def get_active_alerts():
+    """Get all active alerts for responders"""
+    try:
+        session = get_session(engine)
+        
+        alerts = session.query(Alert).filter(
+            Alert.status.in_([AlertStatus.TRIGGERED, AlertStatus.ACKNOWLEDGED, AlertStatus.DISPATCHED])
+        ).all()
+        
+        alerts_data = []
+        for alert in alerts:
+            alert_dict = alert.to_dict(include_sensitive=True)
+            if alert.user:
+                alert_dict['user_name'] = alert.user.name
+                alert_dict['phone'] = alert.user.phone
+            alerts_data.append(alert_dict)
+        
+        session.close()
+        
+        return jsonify(alerts_data)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/alert/respond', methods=['POST'])
+def respond_to_alert():
+    """Responder responds to an alert"""
+    try:
+        data = request.json
+        alert_id = data.get('alert_id')
+        responder_id = data.get('responder_id')
+        
+        session = get_session(engine)
+        
+        # Create response record
+        response = AlertResponse(
+            alert_id=alert_id,
+            responder_id=responder_id,
+            status='responding'
+        )
+        
+        session.add(response)
+        
+        # Update alert status
+        alert = session.query(Alert).filter_by(id=alert_id).first()
+        if alert:
+            alert.status = AlertStatus.DISPATCHED
+        
+        # Update responder availability
+        responder = session.query(Responder).filter_by(id=responder_id).first()
+        if responder:
+            responder.is_available = False
+            responder.total_responses += 1
+        
+        session.commit()
+        session.close()
+        
+        # Notify via WebSocket
+        socketio.emit('responder_assigned', {
+            'alert_id': alert_id,
+            'responder_id': responder_id
+        }, broadcast=True)
+        
+        return jsonify({'success': True, 'message': 'Response recorded'})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/alert/complete', methods=['POST'])
+def complete_alert():
+    """Mark alert as complete"""
+    try:
+        data = request.json
+        alert_id = data.get('alert_id')
+        responder_id = data.get('responder_id')
+        
+        session = get_session(engine)
+        
+        # Update response
+        response = session.query(AlertResponse).filter_by(
+            alert_id=alert_id,
+            responder_id=responder_id
+        ).first()
+        
+        if response:
+            response.status = 'completed'
+            response.completed_at = datetime.now(timezone.utc)
+        
+        # Update alert
+        alert = session.query(Alert).filter_by(id=alert_id).first()
+        if alert:
+            alert.status = AlertStatus.RESOLVED
+            alert.resolved_at = datetime.now(timezone.utc)
+        
+        # Update responder
+        responder = session.query(Responder).filter_by(id=responder_id).first()
+        if responder:
+            responder.is_available = True
+        
+        session.commit()
+        session.close()
+        
+        # Notify via WebSocket
+        socketio.emit('alert_resolved', {
+            'alert_id': alert_id
+        }, broadcast=True)
+        
+        return jsonify({'success': True, 'message': 'Alert completed'})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/volunteer/register', methods=['POST'])
+def register_volunteer():
+    """User registers to become a volunteer"""
+    try:
+        data = request.json
+        
+        session = get_session(engine)
+        
+        # Check if already registered
+        existing = session.query(VolunteerRequest).filter_by(phone=data['phone']).first()
+        if existing:
+            session.close()
+            return jsonify({'error': 'Already registered', 'status': existing.status})
+        
+        volunteer = VolunteerRequest(
+            name=data['name'],
+            phone=data['phone'],
+            location=data.get('location', ''),
+            status='pending'
+        )
+        
+        session.add(volunteer)
+        session.commit()
+        
+        volunteer_data = volunteer.to_dict()
+        session.close()
+        
+        # Notify admin via WebSocket
+        socketio.emit('new_volunteer', volunteer_data, broadcast=True)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Application submitted',
+            'volunteer': volunteer_data
         })
         
     except Exception as e:
