@@ -5,6 +5,8 @@ from flask import Flask, request, jsonify, render_template, send_from_directory
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from flask_cors import CORS
 from datetime import datetime, timedelta, timezone
+from functools import wraps
+import jwt
 import uuid
 import json
 import os
@@ -25,10 +27,11 @@ config_name = os.getenv('FLASK_CONFIG', 'development')
 app.config.from_object(config[config_name])
 
 # Enable CORS
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+cors_origins = os.getenv('CORS_ORIGINS', '*').split(',')
+CORS(app, resources={r"/api/*": {"origins": cors_origins}})
 
 # Initialize SocketIO
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+socketio = SocketIO(app, cors_allowed_origins=cors_origins, async_mode='threading')
 
 # Initialize database
 engine = init_db(app.config['DATABASE_PATH'])
@@ -43,7 +46,90 @@ active_users = {}  # {user_id: socket_id}
 active_alerts = {}  # {alert_id: alert_data}
 
 
+# ============ VALIDATION HELPERS ============
+
+def validate_phone(phone):
+    """Validate phone number format"""
+    import re
+    # Basic validation: checks for digits, optional +, -, space
+    if not phone or not re.match(r'^\+?[\d\-\s]{10,20}$', phone):
+        return False
+    return True
+
+def validate_coordinates(lat, lon):
+    """Validate GPS coordinates"""
+    try:
+        lat = float(lat)
+        lon = float(lon)
+        if not (-90 <= lat <= 90) or not (-180 <= lon <= 180):
+            return False
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
+# ============ AUTHENTICATION HELPER ============
+
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+        if 'Authorization' in request.headers:
+            auth_header = request.headers['Authorization']
+            if auth_header.startswith("Bearer "):
+                token = auth_header.split(" ")[1]
+            else:
+                token = auth_header
+
+        if not token:
+            return jsonify({'error': 'Token is missing'}), 401
+
+        try:
+            data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
+            current_user_phone = data.get('phone')
+            if not current_user_phone:
+                 return jsonify({'error': 'Invalid token payload'}), 401
+        except Exception as e:
+            return jsonify({'error': 'Token is invalid'}), 401
+
+        return f(current_user_phone, *args, **kwargs)
+    return decorated
+
+
 # ============ REST API ENDPOINTS ============
+
+@app.route('/api/login', methods=['POST'])
+def login():
+    """Login and get token"""
+    try:
+        data = request.json
+        phone = data.get('phone')
+        otp = data.get('otp') # Mock OTP
+
+        if not phone:
+             return jsonify({'error': 'Phone number required'}), 400
+
+        # In a real app, verify OTP here.
+        # For demo, we accept any OTP or even just phone if OTP is not provided/checked strictly
+        # But let's check if user exists
+
+        session = get_session(engine)
+        user = session.query(User).filter_by(phone=phone).first()
+        session.close()
+
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        # Generate Token
+        token = jwt.encode({
+            'phone': phone,
+            'exp': datetime.utcnow() + timedelta(hours=24)
+        }, app.config['SECRET_KEY'], algorithm="HS256")
+
+        return jsonify({'token': token})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/')
 def index():
@@ -81,6 +167,9 @@ def register_user():
         
         if not name or not phone:
             return jsonify({'error': 'Name and phone required'}), 400
+
+        if not validate_phone(phone):
+            return jsonify({'error': 'Invalid phone number format'}), 400
         
         session = get_session(engine)
         
@@ -125,20 +214,26 @@ def register_user():
 
 
 @app.route('/api/sos/trigger', methods=['POST', 'OPTIONS'])
-def trigger_sos():
+@token_required
+def trigger_sos(current_user_phone):
     """Trigger SOS alert"""
     if request.method == 'OPTIONS':
         return '', 204
     
     try:
         data = request.json
-        phone = data.get('phone')
+        phone = data.get('phone') or current_user_phone
+
+        if phone != current_user_phone:
+             return jsonify({'error': 'Unauthorized: Phone mismatch'}), 403
+
         latitude = data.get('latitude')
         longitude = data.get('longitude')
-        trigger_method = data.get('trigger_method', 'button')
         
-        if not phone:
-            return jsonify({'error': 'Phone number required'}), 400
+        if not validate_coordinates(latitude, longitude):
+            return jsonify({'error': 'Invalid coordinates'}), 400
+
+        trigger_method = data.get('trigger_method', 'button')
         
         session = get_session(engine)
         
@@ -215,7 +310,8 @@ def trigger_sos():
 
 
 @app.route('/api/sos/cancel', methods=['POST', 'OPTIONS'])
-def cancel_sos():
+@token_required
+def cancel_sos(current_user_phone):
     """Cancel active SOS alert"""
     if request.method == 'OPTIONS':
         return '', 204
@@ -223,7 +319,6 @@ def cancel_sos():
     try:
         data = request.json
         alert_id = data.get('alert_id')
-        verification = data.get('verification', '')
         
         if not alert_id:
             return jsonify({'error': 'Alert ID required'}), 400
@@ -273,7 +368,8 @@ def cancel_sos():
 
 
 @app.route('/api/alerts', methods=['GET'])
-def get_alerts():
+@token_required
+def get_alerts(current_user_phone):
     """Get all alerts"""
     try:
         session = get_session(engine)
@@ -303,7 +399,8 @@ def get_alerts():
 
 
 @app.route('/api/alerts/<alert_id>', methods=['GET'])
-def get_alert(alert_id):
+@token_required
+def get_alert(current_user_phone, alert_id):
     """Get specific alert details"""
     try:
         session = get_session(engine)
@@ -343,7 +440,8 @@ def get_alert(alert_id):
 
 
 @app.route('/api/responders', methods=['GET', 'POST', 'OPTIONS'])
-def manage_responders():
+@token_required
+def manage_responders(current_user_phone):
     """Get or add responders"""
     if request.method == 'OPTIONS':
         return '', 204
@@ -361,6 +459,12 @@ def manage_responders():
             if not name or not responder_type or not phone:
                 return jsonify({'error': 'Name, type, and phone are required'}), 400
             
+            if not validate_phone(phone):
+                return jsonify({'error': 'Invalid phone number format'}), 400
+
+            if not validate_coordinates(latitude, longitude):
+                return jsonify({'error': 'Invalid coordinates'}), 400
+
             session = get_session(engine)
             
             # Check if responder exists
@@ -420,7 +524,8 @@ def manage_responders():
 
 
 @app.route('/api/mesh/nodes', methods=['GET'])
-def get_mesh_nodes():
+@token_required
+def get_mesh_nodes(current_user_phone):
     """Get mesh network nodes"""
     try:
         session = get_session(engine)
