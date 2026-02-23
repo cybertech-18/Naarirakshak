@@ -275,7 +275,36 @@ def get_encryption_manager() -> EncryptionManager:
     """Get global encryption manager instance"""
     global _encryption_manager
     if _encryption_manager is None:
-        _encryption_manager = EncryptionManager()
+        master_key = None
+
+        # Try to load key from env
+        key_hex = os.getenv('ENCRYPTION_KEY')
+        if key_hex:
+            try:
+                master_key = bytes.fromhex(key_hex)
+            except ValueError:
+                print("Invalid ENCRYPTION_KEY format.")
+
+        if master_key is None:
+            # Try to load key from file
+            base_path = os.path.dirname(os.path.abspath(__file__))
+            key_file = os.path.join(base_path, 'encryption.key')
+
+            if os.path.exists(key_file):
+                with open(key_file, 'rb') as f:
+                    master_key = f.read()
+            else:
+                # Generate new key and save it
+                master_key = os.urandom(32)
+                try:
+                    with open(key_file, 'wb') as f:
+                        f.write(master_key)
+                    # Set restrictive permissions (read/write for owner only)
+                    os.chmod(key_file, 0o600)
+                except Exception as e:
+                    print(f"Warning: Could not save encryption key: {e}")
+
+        _encryption_manager = EncryptionManager(master_key)
     return _encryption_manager
 
 
